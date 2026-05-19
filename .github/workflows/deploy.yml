@@ -43,10 +43,19 @@ jobs:
           git checkout deploy || git checkout -b deploy origin/deploy
           git reset --hard origin/deploy
           
-          # Liberar el puerto 3306 antes de levantar Docker
+          # --- LIMPIEZA AGRESIVA DE PUERTOS Y PROCESOS ---
+          # Detener bases de datos locales si existen
           sudo systemctl stop mysqld || true
           sudo systemctl stop mysql || true
-          sudo docker rm -f mysql_db || true
           
+          # Matar cualquier proceso colgado que esté escuchando en los puertos 3306 o 3000
+          sudo fuser -k 3306/tcp || true
+          sudo fuser -k 3000/tcp || true
+          
+          # Remover a la fuerza contenedores viejos para evitar bloqueos de nombres
+          sudo docker rm -f mysql_db || true
+          sudo docker rm -f backend_node || true
+          
+          # --- DESPLIEGUE ---
           sudo docker compose pull
           sudo docker compose up -d --remove-orphans
