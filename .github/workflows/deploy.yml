@@ -2,7 +2,7 @@ name: CI/CD Backend - Deploy to Private EC2
 
 on:
   push:
-    branches: [ deploy ] # Se activa solo al hacer push a la rama deploy
+    branches: [ deploy ]
 
 jobs:
   build-and-push:
@@ -31,14 +31,22 @@ jobs:
     - name: Deploy via SSH Proxy to Private Server
       uses: appleboy/ssh-action@master
       with:
-        host: '10.0.3.201'                  # IP de tu servidor privado
+        host: '10.0.3.201'
         username: 'ec2-user'
         key: ${{ secrets.SSH_KEY }}
-        proxy_host: '32.199.17.172'         # IP de tu servidor público (Puente)
+        proxy_host: '32.199.17.172'
         proxy_username: 'ec2-user'
         proxy_key: ${{ secrets.SSH_KEY }}
         script: |
           cd /home/ec2-user/Back_EVAL2
-          git pull origin deploy
+          git fetch origin
+          git checkout deploy || git checkout -b deploy origin/deploy
+          git reset --hard origin/deploy
+          
+          # Liberar el puerto 3306 antes de levantar Docker
+          sudo systemctl stop mysqld || true
+          sudo systemctl stop mysql || true
+          sudo docker rm -f mysql_db || true
+          
           sudo docker compose pull
           sudo docker compose up -d --remove-orphans
