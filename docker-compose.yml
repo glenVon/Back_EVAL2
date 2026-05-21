@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  backend-api:
+    build: .
+    container_name: innovatech-backend-api
+    ports:
+      - "3000:3000"
+    environment:
+      - DB_HOST=mysql-db # Nombre del servicio en la red interna de Docker
+      - DB_USER=innovatech_user
+      - DB_PASSWORD=password_seguro_123
+      - DB_NAME=innovatech_db
+    depends_on:
+      - mysql-db
+    networks:
+      - internal-bridge-net
+    restart: always
+
+  mysql-db:
+    image: mysql:8.0
+    container_name: innovatech-mysql-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_password_super_seguro
+      - MYSQL_DATABASE=innovatech_db
+      - MYSQL_USER=innovatech_user
+      - MYSQL_PASSWORD=password_seguro_123
+    volumes:
+      - db_storage:/var/lib/mysql # Named Volume para persistencia exigida
+      - ./init:/docker-entrypoint-initdb.d # Opcional: Para cargar el script .sql de Data_Eval2
+    networks:
+      - internal-bridge-net
+    # No se exponen puertos al host para asegurar aislamiento total de la capa de datos
+    restart: always
+
+networks:
+  internal-bridge-net:
+    driver: bridge
+
+volumes:
+  db_storage: # El volumen nombrado es gestionado por el motor de Docker, óptimo para Linux/EC2
