@@ -1,61 +1,41 @@
-name: CI/CD Backend - Deploy to Private EC2
+name: CI/CD Backend Innovatech
 
 on:
   push:
-    branches: [ deploy ]
+    branches:
+      - deploy
 
 jobs:
-  build-and-push:
+  deploy-back:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
+      - name: Obtener código fuente
+        uses: actions/checkout@v3
 
-    - name: Login to Docker Hub
-      uses: docker/login-action@v2
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name: Build and Push Backend Image
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/back-eval2:latest
-
-  deploy-to-private-ec2:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-    - name: Deploy via SSH Proxy to Private Server
-      uses: appleboy/ssh-action@master
-      with:
-        host: '10.0.3.201'
-        username: 'ec2-user'
-        key: ${{ secrets.SSH_KEY }}
-        proxy_host: '32.199.17.172'
-        proxy_username: 'ec2-user'
-        proxy_key: ${{ secrets.SSH_KEY }}
-        script: |
-          cd /home/ec2-user/Back_EVAL2
-          git fetch origin
-          git checkout deploy || git checkout -b deploy origin/deploy
-          git reset --hard origin/deploy
-          
-          # --- LIMPIEZA AGRESIVA DE PUERTOS Y PROCESOS ---
-          # Detener bases de datos locales si existen
-          sudo systemctl stop mysqld || true
-          sudo systemctl stop mysql || true
-          
-          # Matar cualquier proceso colgado que esté escuchando en los puertos 3306 o 3000
-          sudo fuser -k 3306/tcp || true
-          sudo fuser -k 3000/tcp || true
-          
-          # Remover a la fuerza contenedores viejos para evitar bloqueos de nombres
-          sudo docker rm -f mysql_db || true
-          sudo docker rm -f backend_node || true
-          
-          # --- DESPLIEGUE ---
-          sudo docker compose pull
-          sudo docker compose up -d --remove-orphans
+      - name: Desplegar en EC2 Backend vía SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.EC2_HOST_BACK }} # Nota: Usa la IP que configuraste para conectar al Back
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Crear carpeta y entrar
+            mkdir -p ~/backend-app && cd ~/backend-app
+            
+            # Limpiar contenido anterior
+            rm -rf *
+            
+            # Clonar la rama deploy del Backend
+            git clone -b deploy https://github.com/glenVon/Back_EVAL2.git .
+            
+            # Configurar carpeta init para el script SQL de Data_Eval2 (Persistencia)
+            mkdir -p init
+            # Descargamos el script SQL directo desde tu repositorio de datos
+            curl -s https://raw.githubusercontent.com/glenVon/Data_Eval2/main/01_creacion_base_datos.sql -o init/01_creacion_base_datos.sql
+            
+            # Levantar el stack completo (Node.js API + MySQL) con volumen persistente
+            docker compose down || true
+            docker compose up -d --build
+            
+            # Limpieza de imágenes en desuso
+            docker image prune -f
